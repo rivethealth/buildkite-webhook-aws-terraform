@@ -8,17 +8,27 @@ data "archive_file" "lambda" {
   type        = "zip"
 }
 
+resource "aws_api_gateway_authorizer" "api" {
+  authorizer_credentials           = "${aws_iam_role.api.arn}"
+  authorizer_result_ttl_in_seconds = 180
+  authorizer_uri                   = "${aws_lambda_function.authorizer.invoke_arn}"
+  identity_source                  = "method.request.header.X-Buildkite-Token"
+  name                             = "api"
+  rest_api_id                      = "${aws_api_gateway_rest_api.buildkite.id}"
+  type                             = "TOKEN"
+}
+
 resource "aws_api_gateway_deployment" "buildkite" {
   depends_on  = ["aws_api_gateway_integration.event"]
   rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
   stage_name  = "latest"
 
-lifecycle {
+  lifecycle {
     create_before_destroy = true
   }
 
   variables {
-    version = "${var.version}"
+    version = "${var.deploy_version}"
   }
 }
 
@@ -29,40 +39,36 @@ resource "aws_api_gateway_integration" "event" {
   resource_id             = "${aws_api_gateway_method.event.resource_id}"
   rest_api_id             = "${aws_api_gateway_rest_api.buildkite.id}"
   type                    = "AWS"
-  uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:sns:action/Publish"
+  uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:sns:path//"
+
+  request_parameters {
+    "integration.request.header.Content-Type" = "'application/x-www-form-urlencoded'"
+  }
 
   request_templates {
     "application/json" = <<EOF
-Action=Publish##
-&TopicArn=$util.urlEncode('${aws_sns_topic.build.arn}')##
-&Message=$util.urlEncode($input.body)##
+Action=Publish&##
+TopicArn=$util.urlEncode('${aws_sns_topic.event.arn}')&##
+Message=$util.urlEncode($input.body)##
 EOF
   }
 }
 
 resource "aws_api_gateway_integration_response" "event" {
   rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
-  resource_id = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
+  resource_id = "${aws_api_gateway_method.event.resource_id}"
   http_method = "POST"
   status_code = "${aws_api_gateway_method_response.event-200.status_code}"
   depends_on  = ["aws_api_gateway_integration.event"]
 }
 
 resource "aws_api_gateway_method" "event" {
-  authorization        = "NONE"
+  authorization        = "CUSTOM"
+  authorizer_id     = "${aws_api_gateway_authorizer.api.id}"
   http_method          = "POST"
   request_validator_id = "${aws_api_gateway_request_validator.buildkite.id}"
   resource_id          = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
   rest_api_id          = "${aws_api_gateway_rest_api.buildkite.id}"
-
-  request_models {
-    "application/json" = "${aws_api_gateway_model.event.name}"
-  }
-
-  request_parameters {
-    method.request.header.X-Buildkite-Event = true
-    method.request.header.X-Buildkite-Token = true
-  }
 }
 
 resource "aws_api_gateway_method_response" "event-200" {
@@ -70,28 +76,6 @@ resource "aws_api_gateway_method_response" "event-200" {
   resource_id = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
   rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
   status_code = 200
-}
-
-resource "aws_api_gateway_model" "event" {
-  rest_api_id  = "${aws_api_gateway_rest_api.buildkite.id}"
-  name         = "Event"
-  description  = "Buildkite event"
-  content_type = "application/json"
-
-  schema = <<EOF
-{
-  "$schema": "http://json-schema.org/draft-04/schema#",
-  "properties": {
-    "build": {
-      "type": "object"
-    },
-    "pipeline": {
-      "type": "object"
-    }
-  },
-  "type": "object"
-}
-EOF
 }
 
 resource "aws_api_gateway_request_validator" "buildkite" {
@@ -175,10 +159,7 @@ resource "aws_iam_role_policy" "api-sns" {
     {
       "Action": "sns:Publish",
       "Effect": "Allow",
-      "Resource": [
-        "${aws_sns_topic.build.arn}",
-        "${aws_sns_topic.job.arn}"
-      ]
+      "Resource": "${aws_sns_topic.event.arn}"
     }
   ],
   "Version": "2012-10-17"
@@ -194,9 +175,9 @@ resource "aws_iam_role_policy" "authorizer-ssm" {
 {
   "Statement": [
     {
-      "Action": "ssm:DescribeParameters",
+      "Action": "ssm:GetParameter",
       "Effect": "Allow",
-      "Resource": "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/${var.token_ssm_path}"
+      "Resource": "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${var.token_ssm_path}"
     }
   ],
   "Version": "2012-10-17"
@@ -216,7 +197,7 @@ resource "aws_lambda_function" "authorizer" {
   handler          = "index.handler"
   publish          = true
   role             = "${aws_iam_role.authorizer.arn}"
-  runtime          = "nodejs6.10"
+  runtime          = "nodejs8.10"
   source_code_hash = "${data.archive_file.lambda.output_base64sha256}"
   timeout          = 30
 
@@ -227,10 +208,6 @@ resource "aws_lambda_function" "authorizer" {
   }
 }
 
-resource "aws_sns_topic" "build" {
-  name = "${var.name}-build"
-}
-
-resource "aws_sns_topic" "job" {
-  name = "${var.name}-job"
+resource "aws_sns_topic" "event" {
+  name = "${var.name}"
 }
