@@ -3,12 +3,12 @@ variable "deploy_version" {
 }
 
 variable "endpoints" {
-  default = ["all", "foo"]
+  default = ["all"]
   type    = "list"
 }
 
 variable "name" {
-  default = "buildkite"
+  default = "buildkite-events"
 }
 
 variable "token_ssm_path" {}

@@ -5,3 +5,7 @@ output "gateway_api_id" {
 output "gateway_stage_name" {
   value = "${aws_api_gateway_deployment.buildkite.stage_name}"
 }
+
+output "sns_topic_arns" {
+  value = "${aws_sns_topic.event.*.arn}"
+}
