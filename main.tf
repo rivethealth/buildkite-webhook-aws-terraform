@@ -33,10 +33,11 @@ resource "aws_api_gateway_deployment" "buildkite" {
 }
 
 resource "aws_api_gateway_integration" "event" {
+  count                   = "${length(var.endpoints)}"
   credentials             = "${aws_iam_role.api.arn}"
-  http_method             = "${aws_api_gateway_method.event.http_method}"
+  http_method             = "${aws_api_gateway_method.event.*.http_method[count.index]}"
   integration_http_method = "POST"
-  resource_id             = "${aws_api_gateway_method.event.resource_id}"
+  resource_id             = "${aws_api_gateway_method.event.*.resource_id[count.index]}"
   rest_api_id             = "${aws_api_gateway_rest_api.buildkite.id}"
   type                    = "AWS"
   uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:sns:path//"
@@ -48,32 +49,35 @@ resource "aws_api_gateway_integration" "event" {
   request_templates {
     "application/json" = <<EOF
 Action=Publish&##
-TopicArn=$util.urlEncode('${aws_sns_topic.event.arn}')&##
+TopicArn=$util.urlEncode('${aws_sns_topic.event.*.arn[count.index]}')&##
 Message=$util.urlEncode($input.body)##
 EOF
   }
 }
 
 resource "aws_api_gateway_integration_response" "event" {
+  count       = "${length(var.endpoints)}"
   rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
-  resource_id = "${aws_api_gateway_method.event.resource_id}"
+  resource_id = "${aws_api_gateway_method.event.*.resource_id[count.index]}"
   http_method = "POST"
-  status_code = "${aws_api_gateway_method_response.event-200.status_code}"
+  status_code = "${aws_api_gateway_method_response.event-200.*.status_code[count.index]}"
   depends_on  = ["aws_api_gateway_integration.event"]
 }
 
 resource "aws_api_gateway_method" "event" {
   authorization        = "CUSTOM"
-  authorizer_id     = "${aws_api_gateway_authorizer.api.id}"
+  authorizer_id        = "${aws_api_gateway_authorizer.api.id}"
+  count                = "${length(var.endpoints)}"
   http_method          = "POST"
   request_validator_id = "${aws_api_gateway_request_validator.buildkite.id}"
-  resource_id          = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
+  resource_id          = "${aws_api_gateway_resource.event.*.id[count.index]}"
   rest_api_id          = "${aws_api_gateway_rest_api.buildkite.id}"
 }
 
 resource "aws_api_gateway_method_response" "event-200" {
-  http_method = "${aws_api_gateway_method.event.http_method}"
-  resource_id = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
+  count       = "${length(var.endpoints)}"
+  http_method = "${aws_api_gateway_method.event.*.http_method[count.index]}"
+  resource_id = "${aws_api_gateway_method.event.*.resource_id[count.index]}"
   rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
   status_code = 200
 }
@@ -83,6 +87,13 @@ resource "aws_api_gateway_request_validator" "buildkite" {
   rest_api_id                 = "${aws_api_gateway_rest_api.buildkite.id}"
   validate_request_body       = true
   validate_request_parameters = true
+}
+
+resource "aws_api_gateway_resource" "event" {
+  count       = "${length(var.endpoints)}"
+  parent_id   = "${aws_api_gateway_rest_api.buildkite.root_resource_id}"
+  path_part   = "${var.endpoints[count.index]}"
+  rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
 }
 
 resource "aws_api_gateway_rest_api" "buildkite" {
@@ -159,7 +170,7 @@ resource "aws_iam_role_policy" "api-sns" {
     {
       "Action": "sns:Publish",
       "Effect": "Allow",
-      "Resource": "${aws_sns_topic.event.arn}"
+      "Resource": ${jsonencode(aws_sns_topic.event.*.arn)}
     }
   ],
   "Version": "2012-10-17"
@@ -209,5 +220,6 @@ resource "aws_lambda_function" "authorizer" {
 }
 
 resource "aws_sns_topic" "event" {
-  name = "${var.name}"
+  count = "${length(var.endpoints)}"
+  name  = "${var.name}-${var.endpoints[count.index]}"
 }

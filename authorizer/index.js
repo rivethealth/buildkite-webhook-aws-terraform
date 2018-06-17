@@ -7,9 +7,9 @@ exports.handler = async ({authorizationToken, methodArn}, _, callback) => {
         Name: process.env.TOKEN_PATH,
         WithDecryption: true,
     };
-    const {Parameter: {Value: expectedToken}} = await ssm.getParameter(tokenRequest).promise();
+    const {Parameter: {Value: expectedTokens}} = await ssm.getParameter(tokenRequest).promise();
 
-    if (expectedToken === authorizationToken) {
+    if (expectedTokens.split(',').includes(authorizationToken)) {
         callback(null, {
             principalId: 'buildkite',
             policyDocument: {
