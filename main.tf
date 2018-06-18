@@ -19,16 +19,12 @@ resource "aws_api_gateway_authorizer" "api" {
 }
 
 resource "aws_api_gateway_deployment" "buildkite" {
-  depends_on  = ["aws_api_gateway_integration.event"]
-  rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
-  stage_name  = "latest"
+  stage_description = "${var.deploy_version}"
+  stage_name        = ""
+  rest_api_id       = "${aws_api_gateway_rest_api.buildkite.id}"
 
   lifecycle {
     create_before_destroy = true
-  }
-
-  variables {
-    version = "${var.deploy_version}"
   }
 }
 
@@ -48,9 +44,12 @@ resource "aws_api_gateway_integration" "event" {
 
   request_templates {
     "application/json" = <<EOF
-Action=Publish&##
-TopicArn=$util.urlEncode('${aws_sns_topic.event.*.arn[count.index]}')&##
-Message=$util.urlEncode($input.body)##
+Action=Publish##
+&Message=$util.urlEncode($input.body)##
+&MessageAttributes.entry.1.Name=event##
+&MessageAttributes.entry.1.Value.DataType=String##
+&MessageAttributes.entry.1.Value.StringValue=$util.urlEncode($input.params('X-Buildkite-Event'))##
+&TopicArn=${urlencode(aws_sns_topic.event.*.arn[count.index])}##
 EOF
   }
 }
@@ -72,6 +71,10 @@ resource "aws_api_gateway_method" "event" {
   request_validator_id = "${aws_api_gateway_request_validator.buildkite.id}"
   resource_id          = "${aws_api_gateway_resource.event.*.id[count.index]}"
   rest_api_id          = "${aws_api_gateway_rest_api.buildkite.id}"
+
+  request_parameters {
+    method.request.header.X-Buildkite-Event = true
+  }
 }
 
 resource "aws_api_gateway_method_response" "event-200" {
@@ -82,10 +85,20 @@ resource "aws_api_gateway_method_response" "event-200" {
   status_code = 200
 }
 
+resource "aws_api_gateway_method_settings" "buildkite" {
+  method_path = "*/*"
+  rest_api_id = "${aws_api_gateway_rest_api.buildkite.id}"
+  stage_name  = "${aws_api_gateway_stage.buildkite.stage_name}"
+
+  settings {
+    metrics_enabled = true
+    logging_level   = "INFO"
+  }
+}
+
 resource "aws_api_gateway_request_validator" "buildkite" {
   name                        = "validate"
   rest_api_id                 = "${aws_api_gateway_rest_api.buildkite.id}"
-  validate_request_body       = true
   validate_request_parameters = true
 }
 
@@ -99,6 +112,17 @@ resource "aws_api_gateway_resource" "event" {
 resource "aws_api_gateway_rest_api" "buildkite" {
   description = "Buildkite webhook consumer"
   name        = "${var.name}"
+}
+
+resource "aws_api_gateway_stage" "buildkite" {
+  deployment_id = "${aws_api_gateway_deployment.buildkite.id}"
+  rest_api_id   = "${aws_api_gateway_rest_api.buildkite.id}"
+  stage_name    = "latest"
+
+  access_log_settings {
+    destination_arn = "arn:aws:logs:us-east-1:${data.aws_caller_identity.current.account_id}:log-group:/buildkite/webhook/access"
+    format          = "$context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] $context.httpMethod $context.resourcePath $context.protocol $context.status $context.responseLength $context.requestId"
+  }
 }
 
 resource "aws_iam_role" "api" {
