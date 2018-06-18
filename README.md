@@ -1,4 +1,6 @@
-# Buildkite webhooks to AWS Terraform
+# Buildkite webhook to AWS SNS
+
+Use Buildkite webhooks to publish events to AWS SNS, enabling easy consumption by Lambda or other subscribers in the AWS ecosystem.
 
 * [Inputs](#inputs)
 * [Outputs](#outputs)
@@ -9,11 +11,11 @@
 
 ## Usage
 
-The webhook token should be stored as a secure string in AWS Systems Manager Parameter Store. Use a comma separated list for multiple allowed tokens.
+The webhook token should be stored as a secure string in AWS Systems Manager Parameter Store. To allow multiple tokens, use a comma separated list.
 
 Multiple HTTP resources can be created. Each corresponds to a separate SNS topic.
 
-SNS messages have an attribute "event" with the contents of X-Buildkite-Event. You may use this for subcription [filter policies](https://docs.aws.amazon.com/sns/latest/dg/message-filtering.html).
+SNS messages have an attribute "event" with the contents of X-Buildkite-Event. You may use this for subscription [filter policies](https://docs.aws.amazon.com/sns/latest/dg/message-filtering.html).
 
 ### Inputs
 
@@ -33,7 +35,7 @@ SNS messages have an attribute "event" with the contents of X-Buildkite-Event. Y
 | gateway_stage_name | string | Stage name of API gateway |
 | sns_topic_arns | list | ARNs of SNS topics |
 
-Requests can be made against "${gateway_invoke_url}/${endpoint}"
+Requests can be made against "${gateway_invoke_url}/${endpoint}". (Or use a [custom domain](#custom-domain))
 
 ## Examples
 
