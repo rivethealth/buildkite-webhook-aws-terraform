@@ -120,7 +120,7 @@ resource "aws_api_gateway_stage" "buildkite" {
   stage_name    = "latest"
 
   access_log_settings {
-    destination_arn = "arn:aws:logs:us-east-1:${data.aws_caller_identity.current.account_id}:log-group:/buildkite/webhook/access"
+    destination_arn = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/buildkite/webhook/access"
     format          = "$context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] $context.httpMethod $context.resourcePath $context.protocol $context.status $context.responseLength $context.requestId"
   }
 }
