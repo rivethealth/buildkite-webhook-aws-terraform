@@ -19,6 +19,7 @@ resource "aws_api_gateway_authorizer" "api" {
 }
 
 resource "aws_api_gateway_deployment" "buildkite" {
+  depends_on = ["aws_api_gateway_integration_response.event"]
   stage_description = "${var.deploy_version}"
   stage_name        = ""
   rest_api_id       = "${aws_api_gateway_rest_api.buildkite.id}"
