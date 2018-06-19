@@ -1,6 +1,6 @@
 # Buildkite webhook to AWS SNS
 
-Use Buildkite webhooks to publish events to AWS SNS, enabling easy consumption by Lambda or other subscribers in the AWS ecosystem.
+Publish Buildkite webhook events to AWS SNS, enabling easy consumption by Lambda or other subscribers in the AWS ecosystem.
 
 * [Inputs](#inputs)
 * [Outputs](#outputs)
@@ -11,7 +11,7 @@ Use Buildkite webhooks to publish events to AWS SNS, enabling easy consumption b
 
 ## Usage
 
-The webhook token should be stored as a secure string in AWS Systems Manager Parameter Store. To allow multiple tokens, use a comma separated list.
+The webhook token should be stored as a secure string in AWS Systems Manager Parameter Store. To allow multiple tokens, use a comma separated list. This token is verified before publishing messages.
 
 Multiple HTTP resources can be created. Each corresponds to a separate SNS topic.
 
@@ -52,7 +52,7 @@ module "buildkite-events" {
 
 ```hcl
 data "aws_acm_certificate" "buildkite-events" {
-  domain   = "buildkite-events.my-domain.com"
+  domain   = "buildkite-events.example.com"
   statuses = ["ISSUED"]
 }
 
@@ -69,7 +69,7 @@ resource "aws_api_gateway_base_path_mapping" "buildkite-events" {
 
 resource "aws_api_gateway_domain_name" "buildkite-events" {
   certificate_arn = "${data.aws_acm_certificate.buildkite-events.arn}"
-  domain_name     = "buildkite-events.my-domain.com"
+  domain_name     = "buildkite-events.example.com"
 }
 ```
 
