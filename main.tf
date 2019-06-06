@@ -39,11 +39,11 @@ resource "aws_api_gateway_integration" "event" {
   type                    = "AWS"
   uri                     = "arn:aws:apigateway:${data.aws_region.current.name}:sns:path//"
 
-  request_parameters {
+  request_parameters = {
     "integration.request.header.Content-Type" = "'application/x-www-form-urlencoded'"
   }
 
-  request_templates {
+  request_templates = {
     "application/json" = <<EOF
 Action=Publish##
 &Message=$util.urlEncode($input.body)##
@@ -73,8 +73,8 @@ resource "aws_api_gateway_method" "event" {
   resource_id          = "${aws_api_gateway_resource.event.*.id[count.index]}"
   rest_api_id          = "${aws_api_gateway_rest_api.buildkite.id}"
 
-  request_parameters {
-    method.request.header.X-Buildkite-Event = true
+  request_parameters = {
+    "method.request.header.X-Buildkite-Event" = true
   }
 }
 
@@ -238,7 +238,7 @@ resource "aws_lambda_function" "authorizer" {
   timeout          = 30
 
   environment {
-    variables {
+    variables = {
       TOKEN_PATH = "${var.token_ssm_path}"
     }
   }
